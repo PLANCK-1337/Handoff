@@ -13,6 +13,7 @@ import android.os.SystemClock;
 import java.lang.reflect.Method;
 import com.handoff.api.health.HealthEvent;
 import com.handoff.api.links.ParsedLink;
+import com.handoff.executor.DefaultBrowserLauncher;
 import com.handoff.executor.DouyinLauncher;
 import com.handoff.executor.KuaishouLauncher;
 
@@ -78,6 +79,7 @@ final class BrowserHandoff {
         HealthReports.emit(reporter, kind, HealthEvent.Entry.BROWSER, reason);
         HealthReports.emit(reporter, kind, HealthEvent.Entry.DOUYIN, reason);
         HealthReports.emit(reporter, kind, HealthEvent.Entry.KUAISHOU, reason);
+        HealthReports.emit(reporter, kind, HealthEvent.Entry.DEFAULT_BROWSER, reason);
     }
 
     private Object intercept(XposedInterface.Chain chain) throws Throwable {
@@ -110,7 +112,11 @@ final class BrowserHandoff {
         if (kuaishou != null) return redirectKuaishou(activity, outgoing, kuaishou);
         String id = BrowserDispatch.videoId(caller,
                 target.getPackageName(), target.getClassName(), url, reporter.profile().contract());
-        return id != null && redirectBili(activity, url, id, start);
+        if (id != null) return redirectBili(activity, url, id, start);
+        if (!DefaultBrowserDispatch.matches(caller, target.getPackageName(), target.getClassName(), url,
+                activity.isDestroyed(), outgoing.getSelector() != null,
+                (outgoing.getFlags() & Intent.FLAG_ACTIVITY_FORWARD_RESULT) != 0, reporter.profile().contract())) return false;
+        return DefaultBrowserHandoff.redirect(() -> DefaultBrowserLauncher.launch(activity, url), reporter);
     }
 
     private static boolean pilotCallerSupported(Activity activity, Intent outgoing) {
